@@ -49,7 +49,7 @@ jobs:
           slug() { echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g'; }
           wslug="$(slug "${{ inputs.whisper_ref }}")"
           lslug="$(slug "${{ inputs.llama_ref }}")"
-          tag="prebuilts-${dt}-wc-${wslug}-ll-${lslug}"
+          tag="pb-${dt}-whspr-${wslug}-llama-${lslug}"
           name="${{ inputs.release_title }}"
           if [ -z "$name" ]; then
             name="VOXT prebuilts ${dt} (wc=${{ inputs.whisper_ref }}, ll=${{ inputs.llama_ref }})"
