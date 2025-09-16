@@ -223,6 +223,11 @@ jobs:
     needs: [prepare, build-amd64, build-arm64]
     runs-on: ubuntu-22.04
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -236,17 +241,6 @@ jobs:
           cp _dl/amd64-sse42/*  release/ || true
           cp _dl/arm64/*        release/ || true
           ( cd release && sha256sum *.tar.gz > SHA256SUMS_ALL.txt )
-
-      - name: Create tag (if missing)
-        run: |
-          set -euo pipefail
-          tag="${{ needs.prepare.outputs.tag }}"
-          if ! git ls-remote --tags origin "refs/tags/${tag}" | grep -q .; then
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$tag" -m "Prebuilts $tag" "$GITHUB_SHA"
-            git push origin "refs/tags/${tag}"
-          fi
 
       - name: Create/Update release and upload assets (gh)
         env:
