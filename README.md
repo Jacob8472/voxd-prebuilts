@@ -17,5 +17,4 @@ Latest release assets:
 - `llama-server_linux_arm64.tar.gz`
 - `SHA256SUMS_*.txt`
 
-Direct URL (to latest builds):
-`https://github.com/Jacob8472/voxt-prebuilts/releases/latest/download/`
+Direct URL (to latest builds): [Releases](https://github.com/jakovius/voxd-prebuilts/releases/latest)
