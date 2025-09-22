@@ -19,6 +19,14 @@ on:
         description: "Tag/branch/commit for llama.cpp"
         required: true
         default: "master"
+      ydotool_repo:
+        description: "Upstream repo for ydotool"
+        required: true
+        default: "ReimuNotMoe/ydotool"
+      ydotool_ref:
+        description: "Tag/branch/commit for ydotool"
+        required: true
+        default: "master"
       prerelease:
         description: "Mark GitHub Release as prerelease"
         required: true
@@ -218,9 +226,156 @@ jobs:
           name: arm64
           path: ${{ github.workspace }}/release/*
 
+  build-ydotool-amd64:
+    name: Build ydotool amd64
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in manylinux2014_x86_64
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/w" -w /w \
+            quay.io/pypa/manylinux2014_x86_64 /bin/bash -lc '
+            set -e
+            yum -y install gcc gcc-c++ make tar which git binutils curl kernel-headers
+            CMAKE_VER=3.28.6
+            ARCH=x86_64
+            curl -fsSL -o /tmp/cmake.tgz https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-${ARCH}.tar.gz
+            mkdir -p /opt/cmake && tar -C /opt/cmake --strip-components=1 -xzf /tmp/cmake.tgz
+            export PATH=/opt/cmake/bin:$PATH
+            cmake --version
+
+            git clone "https://github.com/${{ inputs.ydotool_repo }}.git" _src/ydotool
+            ( cd _src/ydotool && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.ydotool_ref }}" )
+
+            mkdir -p /w/_build/ydotool && cd /w/_build/ydotool
+            cmake -S /w/_src/ydotool -B . \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_DOCS=OFF \
+              -DSYSTEMD_USER_SERVICE=OFF \
+              -DSYSTEMD_SYSTEM_SERVICE=OFF
+            cmake --build . -j"$(nproc)" --target ydotool ydotoold
+
+            # Locate built binaries robustly
+            ydt_cli="$(find . -maxdepth 5 -type f -name ydotool -executable | head -n1)"
+            ydt_daem="$(find . -maxdepth 5 -type f -name ydotoold -executable | head -n1)"
+            echo "Found ydotool: $ydt_cli"
+            echo "Found ydotoold: $ydt_daem"
+            strip --strip-unneeded "$ydt_cli"  || true
+            strip --strip-unneeded "$ydt_daem" || true
+
+            mkdir -p dist/cli dist/daemon
+            cp "$ydt_cli"  dist/cli/ydotool
+            cp "$ydt_daem" dist/daemon/ydotoold
+            cp /w/_src/ydotool/LICENSE dist/cli/LICENSE
+            cp /w/_src/ydotool/LICENSE dist/daemon/LICENSE
+            commit="$(cd /w/_src/ydotool && git rev-parse HEAD)"
+            printf "%s\n" \
+              "project=ydotool" \
+              "repo=${{ inputs.ydotool_repo }}" \
+              "ref=${{ inputs.ydotool_ref }}" \
+              "commit=$commit" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_x86_64" \
+              > dist/cli/BUILDINFO.txt
+            cp dist/cli/BUILDINFO.txt dist/daemon/BUILDINFO.txt
+
+            mkdir -p /w/release
+            tar -C dist/cli    -czf /w/release/ydotool_linux_amd64.tar.gz .
+            tar -C dist/daemon -czf /w/release/ydotoold_linux_amd64.tar.gz .
+            ( cd /w/_src/ydotool && git archive --format=tar.gz --output=/w/release/ydotool-src_${commit}.tar.gz "$commit" )
+            (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_ydotool_amd64.txt)
+            ls -al /w/release
+          '
+
+      - name: List release
+        run: ls -al "${{ github.workspace }}/release" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ydotool-amd64
+          path: ${{ github.workspace }}/release/*
+
+  build-ydotool-arm64:
+    name: Build ydotool arm64
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build in manylinux2014_aarch64
+        run: |
+          docker run --rm --platform=linux/arm64 \
+            -v "${{ github.workspace }}:/w" -w /w quay.io/pypa/manylinux2014_aarch64 /bin/bash -lc '
+            set -e
+            yum -y install gcc gcc-c++ make tar which git binutils curl kernel-headers
+            CMAKE_VER=3.28.6
+            ARCH=aarch64
+            curl -fsSL -o /tmp/cmake.tgz https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-${ARCH}.tar.gz
+            mkdir -p /opt/cmake && tar -C /opt/cmake --strip-components=1 -xzf /tmp/cmake.tgz
+            export PATH=/opt/cmake/bin:$PATH
+            cmake --version
+
+            git clone "https://github.com/${{ inputs.ydotool_repo }}.git" _src/ydotool
+            ( cd _src/ydotool && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.ydotool_ref }}" )
+
+            mkdir -p /w/_build/ydotool && cd /w/_build/ydotool
+            cmake -S /w/_src/ydotool -B . \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_DOCS=OFF \
+              -DSYSTEMD_USER_SERVICE=OFF \
+              -DSYSTEMD_SYSTEM_SERVICE=OFF
+            cmake --build . -j"$(nproc)" --target ydotool ydotoold
+
+            # Locate built binaries robustly
+            ydt_cli="$(find . -maxdepth 5 -type f -name ydotool -executable | head -n1)"
+            ydt_daem="$(find . -maxdepth 5 -type f -name ydotoold -executable | head -n1)"
+            echo "Found ydotool: $ydt_cli"
+            echo "Found ydotoold: $ydt_daem"
+            strip --strip-unneeded "$ydt_cli"  || true
+            strip --strip-unneeded "$ydt_daem" || true
+
+            mkdir -p dist/cli dist/daemon
+            cp "$ydt_cli"  dist/cli/ydotool
+            cp "$ydt_daem" dist/daemon/ydotoold
+            cp /w/_src/ydotool/LICENSE dist/cli/LICENSE
+            cp /w/_src/ydotool/LICENSE dist/daemon/LICENSE
+            commit="$(cd /w/_src/ydotool && git rev-parse HEAD)"
+            printf "%s\n" \
+              "project=ydotool" \
+              "repo=${{ inputs.ydotool_repo }}" \
+              "ref=${{ inputs.ydotool_ref }}" \
+              "commit=$commit" \
+              "built_at=$(date -u +%F)" \
+              "env=manylinux2014_aarch64" \
+              > dist/cli/BUILDINFO.txt
+            cp dist/cli/BUILDINFO.txt dist/daemon/BUILDINFO.txt
+
+            mkdir -p /w/release
+            tar -C dist/cli    -czf /w/release/ydotool_linux_arm64.tar.gz .
+            tar -C dist/daemon -czf /w/release/ydotoold_linux_arm64.tar.gz .
+            ( cd /w/_src/ydotool && git archive --format=tar.gz --output=/w/release/ydotool-src_${commit}.tar.gz "$commit" )
+            (cd /w/release && sha256sum *.tar.gz > SHA256SUMS_ydotool_arm64.txt)
+            ls -al /w/release
+          '
+
+      - name: List release
+        run: ls -al "${{ github.workspace }}/release" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ydotool-arm64
+          path: ${{ github.workspace }}/release/*
+
   publish:
     name: Publish GitHub Release
-    needs: [prepare, build-amd64, build-arm64]
+    needs: [prepare, build-amd64, build-arm64, build-ydotool-amd64, build-ydotool-arm64]
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
@@ -240,6 +395,8 @@ jobs:
           cp _dl/amd64-avx2/*   release/ || true
           cp _dl/amd64-sse42/*  release/ || true
           cp _dl/arm64/*        release/ || true
+          cp _dl/ydotool-amd64/*  release/ || true
+          cp _dl/ydotool-arm64/*  release/ || true
           ( cd release && sha256sum *.tar.gz > SHA256SUMS_ALL.txt )
 
       - name: Create/Update release and upload assets (gh)
@@ -253,7 +410,7 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" \
               --title "$name" \
-              --notes "Prebuilt whisper.cpp and llama.cpp binaries." \
+              --notes "Prebuilt whisper.cpp, llama.cpp, and ydotool (client + daemon) binaries. Includes upstream LICENSE files and ydotool corresponding source tarballs for AGPL-3.0 compliance." \
               --prerelease \
               --latest=false \
               --target "$GITHUB_SHA"
