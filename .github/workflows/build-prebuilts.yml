@@ -265,7 +265,7 @@ jobs:
               -DBUILD_DOCS=OFF \
               -DSYSTEMD_USER_SERVICE=OFF \
               -DSYSTEMD_SYSTEM_SERVICE=OFF \
-              -DCMAKE_C_FLAGS="-I/w/_deps/linux-uapi/include/uapi"
+              -DCMAKE_C_FLAGS="-I/w/_deps/linux-uapi/include/uapi -D__user="
             cmake --build . -j"$(nproc)" --target ydotool ydotoold
 
             # Locate built binaries robustly
