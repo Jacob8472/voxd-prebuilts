@@ -1,4 +1,4 @@
-name: Build prebuilts (whisper.cpp + llama.cpp)
+name: Build prebuilts (whisper.cpp | llama.cpp | ydotool)
 
 on:
   workflow_dispatch:
@@ -250,12 +250,22 @@ jobs:
             git clone "https://github.com/${{ inputs.ydotool_repo }}.git" _src/ydotool
             ( cd _src/ydotool && git fetch --all --tags --depth=1 || true; git checkout "${{ inputs.ydotool_ref }}" )
 
+            # Provide modern Linux UAPI headers (CentOS 7 headers lack newer input/uinput symbols)
+            mkdir -p /w/_deps/linux-uapi/include/uapi/linux
+            curl -fsSL -o /w/_deps/linux-uapi/include/uapi/linux/uinput.h \
+              https://raw.githubusercontent.com/torvalds/linux/v6.6/include/uapi/linux/uinput.h
+            curl -fsSL -o /w/_deps/linux-uapi/include/uapi/linux/input.h \
+              https://raw.githubusercontent.com/torvalds/linux/v6.6/include/uapi/linux/input.h
+            curl -fsSL -o /w/_deps/linux-uapi/include/uapi/linux/input-event-codes.h \
+              https://raw.githubusercontent.com/torvalds/linux/v6.6/include/uapi/linux/input-event-codes.h
+
             mkdir -p /w/_build/ydotool && cd /w/_build/ydotool
             cmake -S /w/_src/ydotool -B . \
               -DCMAKE_BUILD_TYPE=Release \
               -DBUILD_DOCS=OFF \
               -DSYSTEMD_USER_SERVICE=OFF \
-              -DSYSTEMD_SYSTEM_SERVICE=OFF
+              -DSYSTEMD_SYSTEM_SERVICE=OFF \
+              -DCMAKE_C_FLAGS="-I/w/_deps/linux-uapi/include/uapi"
             cmake --build . -j"$(nproc)" --target ydotool ydotoold
 
             # Locate built binaries robustly
